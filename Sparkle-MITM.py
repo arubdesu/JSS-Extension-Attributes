@@ -10,7 +10,7 @@ License: http://macmule.com/license/
 """
 
 # Imports
-import os
+import os.path
 import subprocess
 from pkg_resources import parse_version
 
