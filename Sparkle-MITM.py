@@ -20,7 +20,6 @@ def main():
     """
     # Variables
     vulnerable_apps = ''
-    null = open(os.devnull, 'w')
     sparkle_info = '/Contents/Frameworks/Sparkle.framework/Versions/A/Resources/Info.plist'
     # Use mdfind to get all apps
     get_apps = subprocess.Popen(['/usr/bin/mdfind', 'kind:app'], stdout=subprocess.PIPE,)
