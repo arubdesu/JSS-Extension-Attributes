@@ -1,78 +1,57 @@
 #!/usr/bin/python
 """
 EA to get a list of all apps that are vulnerable to Sparkle MITM attacks
-
 More information: https://macmule.com/2016/01/31/sparkle-updater-framework-http-man-in-the-middle-vulnerability
-
 GitRepo: https://github.com/macmule/JSS-Extension-Attributes
-
 License: http://macmule.com/license/
 """
-
-# Imports
-import os.path
+import os
 import subprocess
-from pkg_resources import parse_version
+from CoreFoundation import CFPreferencesCopyAppValue
+from distutils.version import LooseVersion
 
-def main():
+def get_vulnapps():
     """
-    Get a list of apps with Sparkle frameworks
+    Get a list of apps with old Sparkle frameworks, and check SUFeedURL for http://
+    If Sparkle framework version not found, adds to vulnerable list.
     """
-    # Variables
-    vulnerable_apps = ''
+    # Get all apps mdfind knows about
+    apps = subprocess.check_output(['/usr/bin/mdfind', 'kind:app'])
     sparkle_info = '/Contents/Frameworks/Sparkle.framework/Versions/A/Resources/Info.plist'
-    # Use mdfind to get all apps
-    get_apps = subprocess.Popen(['/usr/bin/mdfind', 'kind:app'], stdout=subprocess.PIPE,)
-    # Make into a list
-    app_list = get_apps.communicate()[0].splitlines()
-    # For each app returned
-    for app in app_list:
+    app_info = '/Contents/Info.plist'
+    vulnerableapp_list = []
+    for app in apps.splitlines():
         # If the app has a sparkle framework
         if os.path.exists(app + sparkle_info):
-            # Try to get CFBundleShortVersionString
-            try:
-                get_version = subprocess.Popen(['/usr/bin/defaults', 'read', app + \
-         '/Contents/Frameworks/Sparkle.framework/Versions/A/Resources/Info.plist', \
-    'CFBundleShortVersionString',], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                sparkle_version = get_version.communicate()[0]
-            except:
-                pass
-            # If the above fails, try to get the CFBundleVersion
+            # Try to get a version out of Sparkle's framework, returns None without exception if missing
+            sparkle_version = CFPreferencesCopyAppValue('CFBundleShortVersionString',
+                                                        app + sparkle_info)
             if not sparkle_version:
-                get_version = subprocess.Popen(['/usr/bin/defaults', 'read', app + \
-         '/Contents/Frameworks/Sparkle.framework/Versions/A/Resources/Info.plist', \
-              'CFBundleVersion',], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                sparkle_version = get_version.communicate()[0]
-            # Try & get the SUFeedURL
-            try:
-                get_feed_url = subprocess.Popen(['/usr/bin/defaults', 'read', \
-                                 app + '/Contents/Info.plist', 'SUFeedURL',], \
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                sparkle_feed_url = str(get_feed_url.communicate()[0])
-            except:
-                pass
+                sparkle_version = CFPreferencesCopyAppValue('CFBundleVersion',
+                                                            app + sparkle_info)
+            # Check for a SUFeedURL
+            sparkle_feed_url = CFPreferencesCopyAppValue('SUFeedURL',
+                                                         app + app_info)
+            bundle_id = CFPreferencesCopyAppValue('CFBundleIdentifier',
+                                                         app + app_info)
             # If we have a SUFeedURL
-            if sparkle_feed_url:
+            if sparkle_feed_url and not sparkle_feed_url.startswith('https://'):
                 # If Sparkle version is less than 1.13.1 & SUFeedURL is http
-                if parse_version(sparkle_version) < parse_version('1.13.1') \
-                            and not sparkle_feed_url.startswith('https://'):
-                    # Append to string
-                    vulnerable_apps = vulnerable_apps + app + '\n'
-    # Run function
-    vuln_apps(vulnerable_apps)
+                if not sparkle_version:
+                    vulnerableapp_list.append(app + ' - ' + bundle_id)
+                elif LooseVersion(sparkle_version) < LooseVersion('1.13.1'):
+                    vulnerableapp_list.append(app + ' - ' + bundle_id)
+    return vulnerableapp_list
 
 
-def vuln_apps(vulnerable_apps):
-    """
-    For EA, print list of all vulnerable apps including file paths
-    """
-    # If we've found any vulnerable apps
-    if len(vulnerable_apps) > 0:
-        # List apps in EA
-        print '<result>%s</result>' % vulnerable_apps
+def main():
+    """For EA, print list of all vulnerable apps including file paths"""
+    vulnerableapp_list = get_vulnapps()
+    if len(vulnerableapp_list) > 0:
+        result = "\n".join(*[vulnerableapp_list])
     else:
-        # If no vulnerable apps found
-        print '<result>None found</result>'
+        result = 'None found'
+    print '<result>%s</result>' % result
 
 
 if __name__ == '__main__':
